@@ -6,12 +6,17 @@ public class BallLauncher : MonoBehaviour
     [Header("Launch Settings")]
     [SerializeField] private GameObject ballPrefab;
     [SerializeField] private Transform launchPoint;
-    [SerializeField] private float maxLaunchForce = 50f;
-    [SerializeField] private float forceMultiplier = 8f;
+    [SerializeField] private float maxLaunchForce = 25f; // Reduced from 50f
+    [SerializeField] private float forceMultiplier = 12f; // Increased from 8f
     
     [Header("Input Settings")]
-    [SerializeField] private float maxDragDistance = 4f;
+    [SerializeField] private float maxDragDistance = 3f; // Reduced from 4f
     [SerializeField] private Camera gameCamera;
+    
+    [Header("Trajectory Improvements")]
+    [SerializeField] private float upwardForceBoost = 2f; // Add arc to shots
+    [SerializeField] private float minimumUpwardForce = 3f; // Ensure ball goes up
+    [SerializeField] private float forwardForceBoost = 1.2f; // Help reach hoop
     
     [Header("Audio & Feedback")]
     [SerializeField] private AudioClip launchSound;
@@ -24,6 +29,10 @@ public class BallLauncher : MonoBehaviour
     
     [Header("Game Logic")]
     [SerializeField] private int maxShotsPerLevel = 5;
+    
+    [Header("Debug")]
+    [SerializeField] private bool enableDebugLogs = true;
+    [SerializeField] private bool showTrajectoryPreview = true;
     
     // Components
     private TrajectoryRenderer trajectoryRenderer;
@@ -84,6 +93,13 @@ public class BallLauncher : MonoBehaviour
         }
         
         Debug.Log($"BallLauncher initialized in {(contestMode ? "Contest" : "Traditional")} mode");
+        
+        // Debug launch point setup
+        if (enableDebugLogs)
+        {
+            Debug.Log($"Launch point: {(launchPoint != null ? launchPoint.position.ToString() : "NULL")}");
+            Debug.Log($"Camera: {(gameCamera != null ? gameCamera.name : "NULL")}");
+        }
     }
     
     private void Update()
@@ -158,11 +174,18 @@ public class BallLauncher : MonoBehaviour
         }
         
         isAiming = true;
-        startDragPosition = gameCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, gameCamera.nearClipPlane + 1f));
-        startDragPosition.z = launchPoint.position.z; // Keep Z consistent
+        
+        // Improved screen to world conversion
+        Vector3 worldPos = gameCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, 10f));
+        startDragPosition = worldPos;
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"Start aiming at screen: {screenPosition}, world: {worldPos}");
+        }
         
         // Show trajectory
-        if (trajectoryRenderer != null)
+        if (trajectoryRenderer != null && showTrajectoryPreview)
         {
             trajectoryRenderer.ShowTrajectory(launchPoint.position, Vector3.zero);
         }
@@ -172,19 +195,24 @@ public class BallLauncher : MonoBehaviour
     {
         if (!isAiming) return;
         
-        currentDragPosition = gameCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, gameCamera.nearClipPlane + 1f));
-        currentDragPosition.z = launchPoint.position.z; // Keep Z consistent
+        // Improved screen to world conversion
+        Vector3 worldPos = gameCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, 10f));
+        currentDragPosition = worldPos;
         
         Vector3 launchVelocity = CalculateLaunchVelocity();
         
         // Update trajectory
-        if (trajectoryRenderer != null)
+        if (trajectoryRenderer != null && showTrajectoryPreview)
         {
             trajectoryRenderer.UpdateTrajectory(launchPoint.position, launchVelocity);
         }
         
-        // Optional: Visual feedback for drag distance
-        Debug.DrawLine(launchPoint.position, currentDragPosition, Color.red);
+        // Debug visualization
+        if (enableDebugLogs)
+        {
+            Debug.DrawLine(launchPoint.position, currentDragPosition, Color.red, 0.1f);
+            Debug.DrawRay(launchPoint.position, launchVelocity.normalized * 3f, Color.green, 0.1f);
+        }
     }
     
     private Vector3 CalculateLaunchVelocity()
@@ -200,13 +228,31 @@ public class BallLauncher : MonoBehaviour
         // Get force multiplier (may be adjusted by position)
         float currentForceMultiplier = GetCurrentForceMultiplier();
         
-        // Calculate velocity (opposite of drag direction)
+        // Calculate base velocity (opposite of drag direction)
         Vector3 velocity = dragVector * currentForceMultiplier;
+        
+        // ✅ IMPROVED: Add upward force for better arc
+        velocity.y += upwardForceBoost;
+        
+        // ✅ IMPROVED: Ensure minimum upward force
+        if (velocity.y < minimumUpwardForce)
+        {
+            velocity.y = minimumUpwardForce;
+        }
+        
+        // ✅ IMPROVED: Add forward force boost toward hoop
+        Vector3 directionToHoop = (Vector3.zero - launchPoint.position).normalized;
+        velocity += directionToHoop * forwardForceBoost;
         
         // Clamp maximum force
         if (velocity.magnitude > maxLaunchForce)
         {
             velocity = velocity.normalized * maxLaunchForce;
+        }
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"Drag vector: {dragVector}, Final velocity: {velocity}, Magnitude: {velocity.magnitude}");
         }
         
         return velocity;
@@ -252,9 +298,24 @@ public class BallLauncher : MonoBehaviour
                 ballRb.isKinematic = false; // Enable physics
                 ballRb.linearVelocity = launchVelocity;
                 
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"Ball launched with velocity: {launchVelocity} from position: {currentBall.transform.position}");
+                    Debug.Log($"Hoop direction: {(Vector3.zero - currentBall.transform.position).normalized}");
+                    Debug.Log($"Ball mass: {ballRb.mass}, Linear damping: {ballRb.linearDamping}");
+                }
+                
                 // Ball is now launched - clear reference
                 currentBall = null;
             }
+            else
+            {
+                Debug.LogError("Ball prefab missing Rigidbody component!");
+            }
+        }
+        else
+        {
+            Debug.LogError("No ball available to launch!");
         }
         
         // Audio feedback
@@ -358,7 +419,20 @@ public class BallLauncher : MonoBehaviour
             if (ballRb != null)
             {
                 ballRb.isKinematic = true;
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"Ball prepared at position: {spawnPosition}");
+                }
             }
+            else
+            {
+                Debug.LogError("Ball prefab is missing Rigidbody component!");
+            }
+        }
+        else
+        {
+            Debug.LogError("Ball prefab is not assigned!");
         }
     }
     
@@ -381,6 +455,11 @@ public class BallLauncher : MonoBehaviour
             if (position.launchPoint != null)
             {
                 launchPoint = position.launchPoint;
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"Launch point updated to: {launchPoint.position}");
+                }
             }
             
             Debug.Log($"BallLauncher set to position: {position.positionName}");

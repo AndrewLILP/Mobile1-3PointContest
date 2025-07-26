@@ -71,6 +71,7 @@ public class ThreePointContest : MonoBehaviour
         if (basketballHoop != null)
         {
             basketballHoop.OnScore += HandleScore;
+            basketballHoop.OnMiss += HandleMiss; // Add miss handling
         }
         
         // Initialize positions
@@ -88,6 +89,7 @@ public class ThreePointContest : MonoBehaviour
         if (basketballHoop != null)
         {
             basketballHoop.OnScore -= HandleScore;
+            basketballHoop.OnMiss -= HandleMiss;
         }
     }
     
@@ -162,6 +164,12 @@ public class ThreePointContest : MonoBehaviour
             return;
         }
         
+        // Deactivate previous position
+        if (currentPositionIndex < shootingPositions.Length && shootingPositions[currentPositionIndex] != null)
+        {
+            shootingPositions[currentPositionIndex].DeactivatePosition();
+        }
+        
         // Save previous position score
         if (currentPositionIndex > 0 || positionScore > 0)
         {
@@ -173,6 +181,9 @@ public class ThreePointContest : MonoBehaviour
         currentBallIndex = 0;
         
         ShootingPosition newPosition = shootingPositions[positionIndex];
+        
+        // Activate new position
+        newPosition.ActivatePosition();
         
         // Move camera and launcher to new position
         StartCoroutine(TransitionToPosition(newPosition));
@@ -190,11 +201,10 @@ public class ThreePointContest : MonoBehaviour
     {
         shootingAllowed = false;
         
-        // Move ball launcher to new position
+        // Set ball launcher position
         if (ballLauncher != null)
         {
-            ballLauncher.transform.position = newPosition.launchPoint.position;
-            ballLauncher.transform.rotation = newPosition.launchPoint.rotation;
+            ballLauncher.SetPosition(newPosition);
         }
         
         // Move camera to new angle
@@ -235,6 +245,12 @@ public class ThreePointContest : MonoBehaviour
         
         currentBallIndex++;
         
+        // Record shot taken in current position
+        if (currentPositionIndex < shootingPositions.Length && shootingPositions[currentPositionIndex] != null)
+        {
+            shootingPositions[currentPositionIndex].RecordShotTaken();
+        }
+        
         // Check if this is a money ball (last ball at each position)
         bool isMoneyBall = (currentBallIndex == ballsPerPosition);
         OnMoneyBall?.Invoke(isMoneyBall);
@@ -248,6 +264,30 @@ public class ThreePointContest : MonoBehaviour
         
         Debug.Log($"Shot {currentBallIndex}/{ballsPerPosition} from position {currentPositionIndex + 1}" + 
                   (isMoneyBall ? " (MONEY BALL!)" : ""));
+        
+        // ✅ FIX: Check if position is complete after shot
+        if (currentBallIndex >= ballsPerPosition)
+        {
+            Debug.Log($"Position {currentPositionIndex + 1} completed! Moving to next position...");
+            StartCoroutine(CompletePositionAfterDelay());
+        }
+    }
+    
+    private IEnumerator CompletePositionAfterDelay()
+    {
+        // Wait a moment for the ball to settle/score
+        yield return new WaitForSeconds(2f);
+        
+        // Complete current position
+        if (currentPositionIndex < shootingPositions.Length && shootingPositions[currentPositionIndex] != null)
+        {
+            shootingPositions[currentPositionIndex].CompletePosition();
+        }
+        
+        Debug.Log($"Position {currentPositionIndex + 1} complete! Score: {positionScore}");
+        
+        // Move to next position
+        MoveToPosition(currentPositionIndex + 1);
     }
     
     private void HandleScore(int points, bool isSwish)
@@ -261,27 +301,25 @@ public class ThreePointContest : MonoBehaviour
         positionScore += finalPoints;
         totalScore += finalPoints;
         
+        // Update position shot record to scored
+        if (currentPositionIndex < shootingPositions.Length && shootingPositions[currentPositionIndex] != null)
+        {
+            shootingPositions[currentPositionIndex].UpdateLastShotScored();
+        }
+        
         OnScoreUpdated?.Invoke(totalScore, positionScore);
         
         Debug.Log($"SCORE! +{finalPoints} points" + (isSwish ? " (SWISH!)" : "") + 
                   (isMoneyBall ? " (MONEY BALL!)" : "") + 
                   $" | Position: {positionScore} | Total: {totalScore}");
-        
-        // Check if position is complete
-        if (currentBallIndex >= ballsPerPosition)
-        {
-            StartCoroutine(CompletePosition());
-        }
     }
     
-    private IEnumerator CompletePosition()
+    private void HandleMiss()
     {
-        yield return new WaitForSeconds(1f); // Let the ball settle
+        if (!contestActive) return;
         
-        Debug.Log($"Position {currentPositionIndex + 1} complete! Score: {positionScore}");
-        
-        // Move to next position
-        MoveToPosition(currentPositionIndex + 1);
+        Debug.Log("Shot missed!");
+        // Shot was already recorded in HandleShotTaken
     }
     
     private void CompleteContest()
@@ -291,6 +329,12 @@ public class ThreePointContest : MonoBehaviour
         
         contestActive = false;
         shootingAllowed = false;
+        
+        // Complete final position
+        if (currentPositionIndex < shootingPositions.Length && shootingPositions[currentPositionIndex] != null)
+        {
+            shootingPositions[currentPositionIndex].CompletePosition();
+        }
         
         // Calculate star rating
         int stars = CalculateStarRating(totalScore);
@@ -328,7 +372,7 @@ public class ThreePointContest : MonoBehaviour
     public int TotalScore => totalScore;
     public int PositionScore => positionScore;
     public bool IsContestActive => contestActive;
-    public bool CanShoot => contestActive && shootingAllowed;
+    public bool CanShoot => contestActive && shootingAllowed && currentBallIndex < ballsPerPosition;
     public string CurrentPositionName => 
         (shootingPositions != null && currentPositionIndex < shootingPositions.Length) 
         ? shootingPositions[currentPositionIndex].positionName 

@@ -31,6 +31,7 @@ public class ShootingPosition : MonoBehaviour
     private bool isCompleted = false;
     private int ballsShot = 0;
     private int ballsScored = 0;
+    private bool lastShotScored = false; // Track if last shot scored
     
     // Events
     public System.Action<ShootingPosition> OnPositionActivated;
@@ -84,6 +85,7 @@ public class ShootingPosition : MonoBehaviour
         ballsShot = 0;
         ballsScored = 0;
         isCompleted = false;
+        lastShotScored = false;
         
         // Calculate aim direction toward hoop (assuming hoop is at origin)
         aimDirection = (Vector3.zero - transform.position).normalized;
@@ -101,6 +103,7 @@ public class ShootingPosition : MonoBehaviour
         isActive = true;
         ballsShot = 0;
         ballsScored = 0;
+        lastShotScored = false;
         
         SetActiveState(true);
         OnPositionActivated?.Invoke(this);
@@ -135,13 +138,40 @@ public class ShootingPosition : MonoBehaviour
     
     public void RecordShot(bool scored)
     {
-        ballsShot++;
-        if (scored)
+        // Only increment shot count if this is a new shot (not updating a previous shot)
+        if (!lastShotScored || !scored)
+        {
+            ballsShot++;
+            lastShotScored = scored;
+        }
+        
+        if (scored && !lastShotScored)
         {
             ballsScored++;
+            lastShotScored = true;
         }
         
         Debug.Log($"{positionName}: Shot {ballsShot} - " + (scored ? "SCORED!" : "Missed"));
+    }
+    
+    public void RecordShotTaken()
+    {
+        // Called when shot is taken (before we know if it scored)
+        ballsShot++;
+        lastShotScored = false;
+        
+        Debug.Log($"{positionName}: Shot {ballsShot} taken");
+    }
+    
+    public void UpdateLastShotScored()
+    {
+        // Called when the last shot scores
+        if (!lastShotScored)
+        {
+            ballsScored++;
+            lastShotScored = true;
+            Debug.Log($"{positionName}: Last shot SCORED! Total: {ballsScored}/{ballsShot}");
+        }
     }
     
     public void ResetPosition()
@@ -150,6 +180,7 @@ public class ShootingPosition : MonoBehaviour
         isCompleted = false;
         ballsShot = 0;
         ballsScored = 0;
+        lastShotScored = false;
         
         SetActiveState(false);
         UpdatePositionMarker();
