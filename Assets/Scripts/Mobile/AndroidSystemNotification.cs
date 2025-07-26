@@ -3,8 +3,12 @@ using Unity.Notifications.Android;
 
 public class AndroidSystemNotification : MonoBehaviour
 {
-    private string idString = "default_channel";
-
+    [Header("Notification Settings")]
+    [SerializeField] private string channelId = "default_channel";
+    [SerializeField] private string channelName = "Default Channel";
+    [SerializeField] private string notificationTitle = "Your Energy has recharged!";
+    [SerializeField] private string notificationText = "Come back to play.";
+    [SerializeField] private int daysToWait = 1;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -13,25 +17,49 @@ public class AndroidSystemNotification : MonoBehaviour
         // Create a channel for the notification
         var channel = new AndroidNotificationChannel()
         {
-            Id = "default_channel",
-            Name = "Default Channel",
+            Id = channelId,
+            Name = channelName,
             Importance = Importance.Low,
             Description = "Low Importance"
         };
         // Register the channel with the Android system
         AndroidNotificationCenter.RegisterNotificationChannel(channel);
+        
         // Create a notification
         var notification = new AndroidNotification
         {
-            Title = "Your Energy has recharged!",
-            Text = "Come back to play.",
+            Title = notificationTitle,
+            Text = notificationText,
             SmallIcon = "default",
             LargeIcon = "default",
-            FireTime = System.DateTime.Now.AddDays(1) // Fire after 1 day
+            FireTime = System.DateTime.Now.AddDays(daysToWait) // Fire after specified days
         };
+        
         // Schedule the notification
-        AndroidNotificationCenter.SendNotification(notification, channel.Id);
+        AndroidNotificationCenter.SendNotification(notification, channelId);
 #endif
     }
 
+    public void ScheduleNotification(string title, string text, int days)
+    {
+#if UNITY_ANDROID
+        var notification = new AndroidNotification
+        {
+            Title = title,
+            Text = text,
+            SmallIcon = "default",
+            LargeIcon = "default",
+            FireTime = System.DateTime.Now.AddDays(days)
+        };
+        
+        AndroidNotificationCenter.SendNotification(notification, channelId);
+#endif
+    }
+
+    public void CancelAllNotifications()
+    {
+#if UNITY_ANDROID
+        AndroidNotificationCenter.CancelAllNotifications();
+#endif
+    }
 }

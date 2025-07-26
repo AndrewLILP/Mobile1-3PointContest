@@ -6,7 +6,6 @@ public class Hoop : MonoBehaviour
     [Header("Hoop Settings")]
     [SerializeField] private Transform hoopRim;
     [SerializeField] private Transform hoopCenter;
-    [SerializeField] private float rimHeight = 3f;
     [SerializeField] private float swishZoneRadius = 0.3f;
     
     [Header("Scoring")]

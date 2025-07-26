@@ -16,6 +16,10 @@ public class ADManager : MonoBehaviour, IUnityAdsLoadListener, IUnityAdsShowList
     {
 #if UNITY_ANDROID
         gameID = androidGameId;
+#elif UNITY_IOS
+        gameID = iosGameId;
+#else
+        gameID = androidGameId; // Default fallback
 #endif
         Advertisement.Initialize(gameID, testMode);
 
